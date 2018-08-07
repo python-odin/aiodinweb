@@ -1,0 +1,4 @@
+# Python cruft
+__pycache__
+.cache
+.coverage
