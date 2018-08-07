@@ -5,22 +5,22 @@ from aiodinweb import constants
 
 class TestMethod:
     @pytest.mark.parametrize('left, right, expected', (
-        ('GET', constants.Method.GET, True),
-        ('Get', constants.Method.GET, False),
-        ('GET', constants.Method.POST, False),
-        ('POST', constants.Method.GET, False),
-        (constants.Method.GET, 'GET', True),
-        (constants.Method.DELETE, constants.Method.DELETE, True),
-        (constants.Method.DELETE, constants.Method.HEAD, False),
+        ('GET', constants.Method.Get, True),
+        ('Get', constants.Method.Get, False),
+        ('GET', constants.Method.Post, False),
+        ('POST', constants.Method.Get, False),
+        (constants.Method.Get, 'GET', True),
+        (constants.Method.Delete, constants.Method.Delete, True),
+        (constants.Method.Delete, constants.Method.Head, False),
     ))
     def test_eq(self, left, right, expected):
         actual = left == right
         assert expected == actual
 
     def test_hash(self):
-        values = {constants.Method.GET, constants.Method.POST, 'GET', 'DELETE'}
+        values = {constants.Method.Get, constants.Method.Post, 'GET', 'DELETE'}
 
         assert 3 == len(values)
-        assert constants.Method.GET in values
-        assert constants.Method.HEAD not in values
+        assert constants.Method.Get in values
+        assert constants.Method.Head not in values
 
