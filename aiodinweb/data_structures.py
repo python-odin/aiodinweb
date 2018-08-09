@@ -1,4 +1,6 @@
-from typing import Union, Sequence
+import re
+
+from typing import Union, Sequence, Iterable, Callable
 
 from . import constants
 
@@ -27,19 +29,43 @@ class Parameter:
         self.allow_empty = allow_empty
 
 
+def _add_atoms(a: list, b: list):
+    if b and b[0] == '':
+        raise ValueError("Right argument cannot be absolute.")
+    return a + b
+
+
+# Name scheme that follows Python names rules for variables
+PATH_PARAM_RE = re.compile(r'^{([a-zA-Z_]\w*)(?::([a-zA-Z_]\w*))?(?::([-^$+*:\w\\\[\]|]+))?}$')
+
+
 class UrlPath(list):
     """
     URL Path object.
     """
     __slots__ = ()
 
+    Atoms = Union['UrlPath', str, Sequence[Union[str, Parameter]]]
+
     @classmethod
-    def from_object(cls, obj: Union['UrlPath', str, Sequence]) -> 'UrlPath':
+    def from_object(cls, obj: Atoms) -> 'UrlPath':
         if isinstance(obj, UrlPath):
             return obj
+
         if isinstance(obj, str):
             return UrlPath.parse(obj)
-        raise ValueError(f"Unable to convert object to UrlPath: {obj!r}")
+
+        if isinstance(obj, Parameter):
+            if obj.in_ != constants.In.Path:
+                raise ValueError("Only path parameters can be used in a UrlPath object.")
+            return UrlPath(obj)
+
+        if isinstance(obj, (tuple, list)):
+            if any(not isinstance(a, (str, Parameter)) for a in obj):
+                raise TypeError("Only str and Parameter objects can be used in a UrlPath")
+            return UrlPath(*obj)
+
+        raise TypeError(f"Unable to convert object to UrlPath: {obj!r}")
 
     @classmethod
     def parse(cls, url_path: str) -> 'UrlPath':
@@ -48,3 +74,113 @@ class UrlPath(list):
         """
         if not url_path:
             return cls()
+
+        atoms = []
+        for atom in url_path.rstrip('/').split('/'):
+            # Identify parameters
+            if '{' in atom or '}' in atom:
+                m = PATH_PARAM_RE.match(atom)
+                if not m:
+                    raise ValueError(f"Invalid path param: {atom}")
+           
+                # Parse out name and type
+                name, param_type, param_arg = m.groups()
+                try:
+                    type_ = constants.DataType[param_type]
+                except KeyError:
+                    if param_type is not None:
+                        raise ValueError(f"Unknown param type `{param_type}` in: {atom}")
+                    type_ = constants.DataType.Integer
+
+                atoms.append(Parameter(name, constants.In.Path, required=True))
+            else:
+                atoms.append(atom)
+
+        return cls(*atoms)
+
+    def __init__(self, *atoms: Union[str, Parameter]) -> None:
+        super().__init__(atoms)
+
+    def __str__(self) -> str:
+        return self.format()
+
+    def __repr__(self) -> str:
+        return "{}({})".format(
+            self.__class__.__name__,
+            ', '.join(repr(a) for a in self)
+        )
+
+    def __hash__(self) -> int:
+        return hash(self.format())
+
+    def __add__(self, other: 'UrlPath') -> 'UrlPath':
+        if isinstance(other, UrlPath):
+            if other and other.is_absolute:
+                raise ValueError("Right argument cannot be absolute")
+            return UrlPath(*list.__add__(self, other))
+        return NotImplemented
+
+    def __div__(self, other: Union[str, 'UrlPath', Parameter]) -> 'UrlPath':
+        if isinstance(other, UrlPath):
+            return self + other
+        if isinstance(other, str):
+            return self + UrlPath.parse(other)
+        if isinstance(other, Parameter):
+            if other.in_ != constants.In.Path:
+                raise ValueError("Right argument must be a path Parameter")
+            return self + UrlPath(other)
+        return NotImplemented
+
+    def __getitem__(self, item: Union[int, slice]) -> 'UrlPath':
+        return UrlPath(list.__getitem__(self, item))
+
+    def startswith(self, other: Atoms) -> bool:
+        """
+        Return True if this path starts with the other path.
+        """
+        try:
+            other = UrlPath.from_object(other)
+        except ValueError:
+            raise TypeError('startswith first arg must be UrlPath, str, PathParam, not {}'.format(type(other)))
+        else:
+            return self[:len(other)] == other
+
+    @property
+    def is_absolute(self) -> bool:
+        """
+        Is an absolute URL
+        """
+        return len(self) and self[0] == ''
+
+    @property
+    def parameters(self) -> Iterable[Parameter]:
+        """
+        All parameters in this URL path
+        """
+        return (a for a in self if isinstance(a, Parameter))
+
+    @staticmethod
+    def default_parameter_formatter(parameter: Parameter) -> str:
+        """
+        Format a parameter to be consumable by the `UrlPath.parse`.
+        """
+        args = [parameter.name]
+        # if parameter.type:
+        #     args.append(path_node.type.name)
+        # if path_node.type_args:
+        #     args.append(path_node.type_args)
+        return "{{{}}}".format(':'.join(args))
+
+    def format(self, parameter_formatter: Callable[[Parameter], str]=None, separator: str='/') -> str:
+        """
+        Format a URL path.
+
+        An optional function can be supplied for converting a `Parameter`
+        into a string.
+
+        """
+        if self == ('',):
+            return separator
+        else:
+            parameter_formatter = parameter_formatter or self.default_parameter_formatter
+            return separator.join(parameter_formatter(a) if isinstance(a, Parameter) else a for a in self)
