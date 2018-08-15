@@ -51,7 +51,7 @@ class Parameter:
 PATH_PARAM_RE = re.compile(r'^{([a-zA-Z_]\w*)(?::([a-zA-Z_]\w*))?(?::([-^$+*:\w\\\[\]|]+))?}$')
 
 
-class UrlPath(list):
+class UrlPath(tuple):
     """
     URL Path object.
     """
@@ -110,8 +110,11 @@ class UrlPath(list):
 
         return cls(*atoms)
 
+    def __new__(cls, *atoms: Union[str, Parameter]) -> 'UrlPath':
+        return super().__new__(cls, atoms)
+
     def __init__(self, *atoms: Union[str, Parameter]) -> None:
-        super().__init__(atoms)
+        super().__init__()
 
     def __str__(self) -> str:
         return self.format()
@@ -129,7 +132,7 @@ class UrlPath(list):
         if isinstance(other, UrlPath):
             if other and other.is_absolute:
                 raise ValueError("Right argument cannot be absolute")
-            return UrlPath(*list.__add__(self, other))
+            return UrlPath(*tuple.__add__(self, other))
         return NotImplemented
 
     def __div__(self, other: Union[str, 'UrlPath', Parameter]) -> 'UrlPath':
@@ -147,9 +150,9 @@ class UrlPath(list):
 
     def __getitem__(self, item: Union[int, slice]) -> Union[str, 'UrlPath']:
         if isinstance(item, slice):
-            return UrlPath(*list.__getitem__(self, item))
+            return UrlPath(*tuple.__getitem__(self, item))
         else:
-            return list.__getitem__(self, item)
+            return tuple.__getitem__(self, item)
 
     def startswith(self, other: Atoms) -> bool:
         """
