@@ -4,8 +4,6 @@ from . import constants
 from .data_structures import UrlPath, EmptyPath, Parameter
 from .operation import Operation, OperationFunction, Methods
 
-__all__ = ('operation', 'listing', 'create', 'detail', 'update', 'delete')
-
 
 def operation(path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Operation]:
     """
@@ -16,7 +14,7 @@ def operation(path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Op
     return inner
 
 
-def listing(func: OperationFunction, *,
+def listing(func: OperationFunction=None, *,
             path: UrlPath.Atoms=EmptyPath,
             **kwargs) -> Callable[[OperationFunction], Operation]:
     """
@@ -29,7 +27,7 @@ def listing(func: OperationFunction, *,
     return inner(func) if func else inner
 
 
-def create(func: OperationFunction, *,
+def create(func: OperationFunction=None, *,
            path: UrlPath.Atoms=EmptyPath,
            methods: Methods=constants.Method.Post,
            **kwargs) -> Callable[[OperationFunction], Operation]:
@@ -44,7 +42,7 @@ def create(func: OperationFunction, *,
     return inner(func) if func else inner
 
 
-def detail(func: OperationFunction, *,
+def detail(func: OperationFunction=None, *,
            path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
            **kwargs) -> Callable[[OperationFunction], Operation]:
     """

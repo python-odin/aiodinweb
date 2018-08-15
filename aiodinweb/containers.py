@@ -6,8 +6,9 @@ from typing import Union, Callable, Iterable, Tuple, Sequence, Dict
 
 from . import content_type_resolvers
 from . import constants
-from .data_structures import UrlPath
-from .operation import Operation, OperationFunction
+from .data_structures import UrlPath, EmptyPath, Parameter, RootPath
+from .helpers import resolve_content_type
+from .operation import Operation, OperationFunction, Methods
 
 
 class ApiContainer:
@@ -19,11 +20,11 @@ class ApiContainer:
         self.children = list(children)
         self.name = name
         if path_prefix:
-            self.path_prefix = UrlPath.parse(path_prefix)
+            self.path_prefix = UrlPath.from_object(path_prefix)
         elif name:
             self.path_prefix = UrlPath.parse(name)
         else:
-            self.path_prefix = None
+            self.path_prefix = EmptyPath
 
         # Setup this container as children's parent
         for child in children:
@@ -31,19 +32,66 @@ class ApiContainer:
 
         self.parent: ApiContainer = None
 
+    def _decorator(self, func: OperationFunction, path: UrlPath.Atoms,
+                   **kwargs) -> Callable[[OperationFunction], Operation]:
+        def inner(f: OperationFunction) -> Operation:
+            operation = Operation(f, path, **kwargs)
+            self.children.append(operation)
+            operation.parent = self
+            return operation
+        return inner(func) if func else inner
+
     def operation(self, path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Operation]:
         """
         Decorate a method as an operation and append to container.
         """
-        def inner(func: OperationFunction) -> Operation:
-            operation = Operation(func, path, **kwargs)
+        return self._decorator(path=path, **kwargs)
 
-            # Make operation a child of this container
-            self.children.append(operation)
-            operation.parent = self
+    def listing(self, func: OperationFunction=None, *,
+                path: UrlPath.Atoms=EmptyPath,
+                **kwargs) -> Callable[[OperationFunction], Operation]:
+        """
+        Listing operation
+        """
+        return self._decorator(func, path, **kwargs)
 
-            return operation
-        return inner
+    def create(self, func: OperationFunction=None, *,
+               path: UrlPath.Atoms=EmptyPath,
+               methods: Methods = constants.Method.Post,
+               **kwargs) -> Callable[[OperationFunction], Operation]:
+        """
+        Create operation
+        """
+        kwargs['methods'] = methods
+        return self._decorator(func, path, **kwargs)
+
+    def detail(self, func: OperationFunction=None, *,
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               **kwargs) -> Callable[[OperationFunction], Operation]:
+        """
+        Detail operation
+        """
+        return self._decorator(func, path, **kwargs)
+
+    def update(self, func: OperationFunction=None, *,
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               methods: Methods = constants.Method.Put,
+               **kwargs) -> Callable[[OperationFunction], Operation]:
+        """
+        Update operation
+        """
+        kwargs['methods'] = methods
+        return self._decorator(func, path, **kwargs)
+
+    def delete(self, func: OperationFunction=None, *,
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               methods: Methods = constants.Method.Delete,
+               **kwargs) -> Callable[[OperationFunction], Operation]:
+        """
+        Delete operation
+        """
+        kwargs['methods'] = methods
+        return self._decorator(func, path, **kwargs)
 
     def op_paths(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, Operation]]:
         """
@@ -108,7 +156,7 @@ class ApiInterface(ApiContainer):
     """
 
     def __init__(self, *children: Union['ApiContainer', Operation],
-                 name: str='api', path_prefix: UrlPath.Atoms=None,
+                 name: str='api', path_prefix: UrlPath.Atoms=RootPath,
                  debug_enabled: bool=False, provide_options: bool=True,
                  logger: logging.Logger=None) -> None:
         """
@@ -150,7 +198,7 @@ class ApiInterface(ApiContainer):
             "meta": None
         })
 
-    async def dispatch_operation(self, operation: Operation, request: web.Request):
+    async def _dispatch_operation(self, operation: Operation, request: web.Request):
         """
         Dispatch and handle exceptions from operation.
         """
@@ -177,3 +225,44 @@ class ApiInterface(ApiContainer):
 
         else:
             return response
+
+    async def _dispatch(self, operation: Operation, request: web.Request) -> web.Response:
+        """
+        Wrapped dispatch method, prepare request and generate a HTTP Response.
+        """
+        # Determine the request and response types. Ensure API supports the requested types
+        request_type = resolve_content_type(self.request_type_resolvers, request)
+        request_type = self.remap_content_types.get(request_type, request_type)
+        # try:
+        #     request.request_codec = self.registered_codecs[request_type]
+        # except KeyError:
+        #     return HttpResponse.from_status(HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        response_type = resolve_content_type(self.response_type_resolvers, request)
+        response_type = self.remap_content_types.get(response_type, response_type)
+        # try:
+        #     request.response_codec = self.registered_codecs[response_type]
+        # except KeyError:
+        #     return HttpResponse.from_status(HTTPStatus.NOT_ACCEPTABLE)
+
+        # Check if method is in our allowed method list
+        if request.method not in operation.methods:
+            pass
+            # return HttpResponse.from_status(
+            #     HTTPStatus.METHOD_NOT_ALLOWED,
+            #     {'Allow': ','.join(m.value for m in operation.methods)}
+            # )
+
+        # Response types
+        resource, status, headers = await self._dispatch_operation(operation, request)
+
+        if isinstance(status, HTTPStatus):
+            status = status.value
+
+        # Return a HttpResponse and just send it!
+        if isinstance(resource, web.Response):
+            return resource
+
+        # Encode the response
+        # return create_response(request, resource, status, headers)
+        return resource
