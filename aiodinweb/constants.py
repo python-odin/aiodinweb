@@ -1,9 +1,7 @@
 import enum
 
-from typing import Union
 
-
-class Method(enum.Enum):
+class Method(str, enum.Enum):
     """
     HTTP Request Method
     """
@@ -15,17 +13,8 @@ class Method(enum.Enum):
     Head = 'HEAD'
     Patch = 'PATCH'
 
-    def __eq__(self, value: Union[str, 'Method']) -> bool:
-        if isinstance(value, str):
-            return value == self.value
-        else:
-            return super().__eq__(value)
 
-    def __hash__(self):
-        return hash(self.value)
-
-
-class In(enum.Enum):
+class In(str, enum.Enum):
     """
     The location of the parameter.
     """
