@@ -7,7 +7,7 @@ from .data_structures import Parameter, UrlPath
 from .utils.sequences import force_tuple
 
 
-OperationFunction = Callable[[web.Request, ...], Awaitable[Response]]
+OperationFunction = Callable[[web.Request], Awaitable[Response]]
 Method = Union[str, constants.Method]
 Methods = Union[Method, Sequence[Method]]
 
@@ -33,7 +33,7 @@ class Operation:
         :param methods: HTTP method(s) this operation response to.
         """
         self.base_func = self.func = func
-        self.path = UrlPath.parse(path)
+        self.path = UrlPath.from_object(path)
         self.methods = force_tuple(methods)
         self.tags = set(force_tuple(tags)) if tags else EmptySet
         self.summary = summary
@@ -48,8 +48,8 @@ class Operation:
 
         self.parent = None
 
-    async def __call__(self, request: Request, *args, **kwargs) -> Awaitable[Response]:
-        return self.func(request, *args, **kwargs)
+    async def __call__(self, request: Request) -> Response:
+        return await self.func(request)
 
     def op_paths(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, 'Operation']]:
         """
