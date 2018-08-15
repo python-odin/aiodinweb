@@ -28,11 +28,23 @@ class Parameter:
         self.required = required
         self.allow_empty = allow_empty
 
+    def __hash__(self):
+        return hash(self.name + str(self.in_))
 
-def _add_atoms(a: list, b: list):
-    if b and b[0] == '':
-        raise ValueError("Right argument cannot be absolute.")
-    return a + b
+    def __eq__(self, other: 'Parameter') -> bool:
+        """
+        Determine if parameters are the same. This is based on the combination
+        of `name` and `in_` attributes
+        """
+        if isinstance(other, Parameter):
+            return self.name == other.name and self.in_ == other.in_
+        return NotImplemented
+
+    def __str__(self) -> str:
+        return f"{{{self.name}}}"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.name!r}, {self.in_!r})"
 
 
 # Name scheme that follows Python names rules for variables
@@ -131,8 +143,13 @@ class UrlPath(list):
             return self + UrlPath(other)
         return NotImplemented
 
-    def __getitem__(self, item: Union[int, slice]) -> 'UrlPath':
-        return UrlPath(list.__getitem__(self, item))
+    __truediv__ = __div__
+
+    def __getitem__(self, item: Union[int, slice]) -> Union[str, 'UrlPath']:
+        if isinstance(item, slice):
+            return UrlPath(*list.__getitem__(self, item))
+        else:
+            return list.__getitem__(self, item)
 
     def startswith(self, other: Atoms) -> bool:
         """
@@ -184,3 +201,7 @@ class UrlPath(list):
         else:
             parameter_formatter = parameter_formatter or self.default_parameter_formatter
             return separator.join(parameter_formatter(a) if isinstance(a, Parameter) else a for a in self)
+
+
+EmptyPath = UrlPath()
+RootPath = UrlPath('')
