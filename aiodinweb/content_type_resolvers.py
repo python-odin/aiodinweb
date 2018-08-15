@@ -5,8 +5,8 @@ Content Type Resolves
 Collection of methods for resolving the content type of a request.
 
 """
-from aiohttp.web import Request
-from typing import Callable, Optional
+from .api import Request
+from typing import Callable, Iterable, Optional
 
 
 ContentTypeResolver = Callable[[Request], Optional[str]]
@@ -37,3 +37,28 @@ def specific_default(content_type: str) -> ContentTypeResolver:
         return content_type
 
     return resolver
+
+
+def parse_content_type(value: str) -> str:
+    """
+    Parse out the content type from a content type header.
+
+    >>> parse_content_type('application/json; charset=utf8')
+    'application/json'
+
+    """
+    if not value:
+        return ''
+
+    return value.split(';')[0].strip()
+
+
+def resolve(type_resolvers: Iterable[ContentTypeResolver],
+            request: Request) -> Optional[str]:
+    """
+    Resolve content types from a request.
+    """
+    for resolver in type_resolvers:
+        content_type = parse_content_type(resolver(request))
+        if content_type:
+            return content_type

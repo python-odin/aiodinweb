@@ -4,10 +4,9 @@ from aiohttp import web
 from http import HTTPStatus
 from typing import Union, Callable, Iterable, Tuple, Sequence, Dict
 
-from . import content_type_resolvers
 from . import constants
+from . import content_type_resolvers
 from .data_structures import UrlPath, EmptyPath, Parameter, RootPath
-from .helpers import resolve_content_type
 from .operation import Operation, OperationFunction, Methods
 
 
@@ -231,14 +230,14 @@ class ApiInterface(ApiContainer):
         Wrapped dispatch method, prepare request and generate a HTTP Response.
         """
         # Determine the request and response types. Ensure API supports the requested types
-        request_type = resolve_content_type(self.request_type_resolvers, request)
+        request_type = content_type_resolvers.resolve(self.request_type_resolvers, request)
         request_type = self.remap_content_types.get(request_type, request_type)
         # try:
         #     request.request_codec = self.registered_codecs[request_type]
         # except KeyError:
         #     return HttpResponse.from_status(HTTPStatus.UNPROCESSABLE_ENTITY)
 
-        response_type = resolve_content_type(self.response_type_resolvers, request)
+        response_type = content_type_resolvers.resolve(self.response_type_resolvers, request)
         response_type = self.remap_content_types.get(response_type, response_type)
         # try:
         #     request.response_codec = self.registered_codecs[response_type]
