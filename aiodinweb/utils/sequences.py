@@ -1,4 +1,4 @@
-from typing import TypeVar, Tuple, List, Dict, Sequence, Union, Any
+from typing import TypeVar, Tuple, Iterable, Union
 
 T = TypeVar('T')
 
@@ -6,7 +6,7 @@ T = TypeVar('T')
 def force_tuple(obj: Union[T, Iterable[T]]) -> Tuple[T]:
     """
     Force an incoming value to be a Tuple with special case for handling bytes
-    and str values as single values rather than iterables.
+    and str values as single values rather than iterable.
 
     """
     if isinstance(obj, (str, bytes)):
@@ -15,5 +15,8 @@ def force_tuple(obj: Union[T, Iterable[T]]) -> Tuple[T]:
     if isinstance(obj, tuple):
         return obj
 
-    return tuple(obj)
+    if isinstance(obj, Iterable):
+        return tuple(obj)
+
+    return obj,
 
