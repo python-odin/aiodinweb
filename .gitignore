@@ -2,3 +2,6 @@
 __pycache__
 .cache
 .coverage
+
+# IDE cruft
+.idea

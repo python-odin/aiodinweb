@@ -1,14 +1,11 @@
 from aiohttp import web
+from aiodinweb.aiohttp import AioApiInterface
 
-
-async def handle(request):
-    name = request.match_info.get('name', "Anonymous")
-    text = "Hello, " + name
-    return web.Response(text=text)
+from .api import example_api
 
 
 app = web.Application()
-app.router.add_get('/', handle)
-app.router.add_get('/{name}', handle)
+AioApiInterface(
+    example_api
+).setup(app)
 web.run_app(app)
-
