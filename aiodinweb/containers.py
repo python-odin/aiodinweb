@@ -1,13 +1,21 @@
 import logging
+import json
+from functools import partial
 
-from aiohttp import web
 from http import HTTPStatus
-from typing import Union, Callable, Iterable, Tuple, Sequence, Dict
+from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional
 
 from . import constants
 from . import content_type_resolvers
-from .data_structures import UrlPath, EmptyPath, Parameter, RootPath
+from .data_structures import UrlPath, EmptyPath, Parameter, RootPath, MiddlewareList
+from .exceptions import ImmediateHttpResponse
+from .resources import Error
 from .operation import Operation, OperationFunction, Methods
+from .web import Request, Response
+
+CODECS = {
+    'application/json': json,
+}
 
 
 class ApiContainer:
@@ -148,16 +156,27 @@ class ApiInterface(ApiContainer):
     """
 
     remap_content_types: Dict[str, str] = {
-        'text/plain': 'application/json'
+        'text/plain': 'application/json',
+        'text/javascript': 'application/json',
+        'text/x-javascript': 'application/json',
+        'text/x-json': 'application/json',
+        'application/x-javascript': 'application/json',
+        # This is a common default content type.
+        'application/octet-stream': 'application/json',
     }
     """
     Remap certain codecs commonly mistakenly used.
     """
 
+    registered_codecs = CODECS
+    """
+    Codecs that are supported by this API.
+    """
+
     def __init__(self, *children: Union['ApiContainer', Operation],
                  name: str='api', path_prefix: UrlPath.Atoms=RootPath,
                  debug_enabled: bool=False, provide_options: bool=True,
-                 logger: logging.Logger=None) -> None:
+                 middleware: list=None, logger: logging.Logger=None) -> None:
         """
         :param children: Collection of child containers/operations
         :param name: Name of the API; defaults to "api"
@@ -166,52 +185,66 @@ class ApiInterface(ApiContainer):
         :param debug_enabled: Enable debug output; this produces a stack trace
             as part of a 500 response.
         :param provide_options: Respond to the Options method automatically.
+        :param middleware: List of middleware
         :param logger: Logger to log errors to; defaults to builtin.
         """
         self.debug_enabled = debug_enabled
         self.provide_options = provide_options
+        self.middleware = MiddlewareList(middleware or [])
         self.logger = logger or logging.getLogger(__name__)
 
-        super().__init__(*children, name=name,
-                         path_prefix=path_prefix or UrlPath('', name))
+        super().__init__(*children, name=name, path_prefix=path_prefix or UrlPath('', name))
 
         if not self.path_prefix.is_absolute:
             raise ValueError("Path prefix must be an absolute path (eg start with a '/')")
 
-    async def handle_500(self, request: web.Request, exception: Exception) -> web.Response:
+    async def handle_500(self, request: Request, exception: Exception) \
+            -> Tuple[Any, Optional[HTTPStatus], Optional[Dict[str, str]]]:
         """
         Handle exceptions raised during the processing of a request.
 
         The default handling is to log the exception (providing the status
         code and request as extra variables) and return an error response.
         """
-        self.logger.exception("Unhandled exception during request handling: %s", exception, extra={
-            'status_code': HTTPStatus.INTERNAL_SERVER_ERROR,
-            'request': request
-        })
-        return web.Response(status=HTTPStatus.INTERNAL_SERVER_ERROR, body={
-            "status": HTTPStatus.INTERNAL_SERVER_ERROR,
-            "code": HTTPStatus.INTERNAL_SERVER_ERROR * 100,
-            "message": "Unhandled exception during request handling.",
-            "developer_message": None,
-            "meta": None
-        })
+        # Let middleware attempt to handle exception
+        try:
+            for middleware in self.middleware.handle_500:
+                response = middleware(request, exception)
+                if response:
+                    return response
 
-    async def _dispatch_operation(self, operation: Operation, request: web.Request):
+        except Exception as ex:
+            exception = ex
+
+        # Fallback to generic error
+        self.logger.exception(
+            "Unhandled exception during request handling: %s", exception,
+            extra={'status': HTTPStatus.INTERNAL_SERVER_ERROR, 'request': request}
+        )
+
+        return Error.from_status(HTTPStatus.INTERNAL_SERVER_ERROR), HTTPStatus.INTERNAL_SERVER_ERROR, None
+
+    async def _dispatch_operation(self, operation: Operation, request: Request) \
+            -> Tuple[Any, Optional[HTTPStatus], Optional[Dict[str, str]]]:
         """
         Dispatch and handle exceptions from operation.
         """
         try:
-            response = await operation(request)
+            # Apply dispatch middleware
+            handler = operation
+            for middleware in self.middleware.dispatch:
+                handler = partial(middleware, handler=handler)
+
+            resource = await handler(request)
+
+        except ImmediateHttpResponse as e:
+            # An exception used to return a response immediately, skipping any
+            # further processing.
+            return e.resource, e.status, e.headers
 
         except NotImplementedError:
-            return web.Response(status=HTTPStatus.NOT_IMPLEMENTED, body={
-                "status": HTTPStatus.NOT_IMPLEMENTED,
-                "code": HTTPStatus.NOT_IMPLEMENTED * 100,
-                "message": "The method has not been implemented.",
-                "developer_message": None,
-                "meta": None
-            })
+            resource = Error.from_status(HTTPStatus.NOT_IMPLEMENTED)
+            return resource, HTTPStatus.NOT_IMPLEMENTED, None
 
         except Exception as e:
             if self.debug_enabled:
@@ -223,26 +256,30 @@ class ApiInterface(ApiContainer):
             return await self.handle_500(request, e)
 
         else:
-            return response
+            return resource, None, None
 
-    async def _dispatch(self, operation: Operation, request: web.Request) -> web.Response:
+    async def _dispatch(self, operation: Operation, request: Request) -> Response:
         """
         Wrapped dispatch method, prepare request and generate a HTTP Response.
         """
         # Determine the request and response types. Ensure API supports the requested types
         request_type = content_type_resolvers.resolve(self.request_type_resolvers, request)
         request_type = self.remap_content_types.get(request_type, request_type)
-        # try:
-        #     request.request_codec = self.registered_codecs[request_type]
-        # except KeyError:
-        #     return HttpResponse.from_status(HTTPStatus.UNPROCESSABLE_ENTITY)
+        try:
+            request.request_codec = self.registered_codecs[request_type]
+            request.request_codec.content_type = request_type
+        except KeyError:
+            return Response(text="Unknown request content-type",
+                            status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
         response_type = content_type_resolvers.resolve(self.response_type_resolvers, request)
         response_type = self.remap_content_types.get(response_type, response_type)
-        # try:
-        #     request.response_codec = self.registered_codecs[response_type]
-        # except KeyError:
-        #     return HttpResponse.from_status(HTTPStatus.NOT_ACCEPTABLE)
+        try:
+            request.response_codec = self.registered_codecs[response_type]
+            request.response_codec.content_type = response_type
+        except KeyError:
+            return Response(text="Unknown response content-type",
+                            status=HTTPStatus.NOT_ACCEPTABLE)
 
         # Check if method is in our allowed method list
         if request.method not in operation.methods:
@@ -255,13 +292,9 @@ class ApiInterface(ApiContainer):
         # Response types
         resource, status, headers = await self._dispatch_operation(operation, request)
 
-        if isinstance(status, HTTPStatus):
-            status = status.value
-
         # Return a HttpResponse and just send it!
-        if isinstance(resource, web.Response):
+        if isinstance(resource, Response):
             return resource
 
         # Encode the response
-        # return create_response(request, resource, status, headers)
-        return resource
+        return Response.create(request, resource, status, headers)
