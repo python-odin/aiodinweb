@@ -1,10 +1,9 @@
 from aiohttp.web import Application, RouteDef, route
+from typing import Generator
 
-from typing import Generator, Awaitable
-
-from . import api
 from .containers import ApiInterface
 from .operation import Operation
+from .web import Request, Response
 
 
 class AioApiInterface(ApiInterface):
@@ -12,7 +11,7 @@ class AioApiInterface(ApiInterface):
     API Interface for AIO-HTTP
     """
     def _bound_callback(self, operation: Operation):
-        async def callback(request: api.Request) -> api.Response:
+        async def callback(request: Request) -> Response:
             return await self._dispatch(operation, request)
         return callback
 
