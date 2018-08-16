@@ -5,8 +5,9 @@ Content Type Resolves
 Collection of methods for resolving the content type of a request.
 
 """
-from .api import Request
 from typing import Callable, Iterable, Optional
+
+from .web import Request
 
 
 ContentTypeResolver = Callable[[Request], Optional[str]]
@@ -54,7 +55,7 @@ def parse_content_type(value: str) -> str:
 
 
 def resolve(type_resolvers: Iterable[ContentTypeResolver],
-            request: Request) -> Optional[str]:
+            request: Request, default_content_type: str=None) -> Optional[str]:
     """
     Resolve content types from a request.
     """
@@ -62,3 +63,4 @@ def resolve(type_resolvers: Iterable[ContentTypeResolver],
         content_type = parse_content_type(resolver(request))
         if content_type:
             return content_type
+    return default_content_type

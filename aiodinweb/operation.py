@@ -2,9 +2,9 @@ from aiohttp import web
 from typing import Any, Callable, Awaitable, Union, Sequence, Dict, Set, Iterable, Tuple
 
 from . import constants
-from .bases import Request, Response
 from .data_structures import Parameter, UrlPath
 from .utils.sequences import force_tuple
+from .web import Request, Response
 
 
 OperationFunction = Callable[[web.Request], Awaitable[Response]]
