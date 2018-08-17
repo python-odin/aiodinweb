@@ -1,4 +1,6 @@
-from typing import TypeVar, Tuple, Iterable, Union
+import itertools
+
+from typing import TypeVar, Tuple, Iterable, Union, Any
 
 T = TypeVar('T')
 
@@ -20,3 +22,19 @@ def force_tuple(obj: Union[T, Iterable[T]]) -> Tuple[T]:
 
     return obj,
 
+
+def dict_filter_update(base: dict, updates: dict) -> None:
+    """
+    Update dict with None values filtered out.
+    """
+    base.update((k, v) for k, v in updates.items() if v is not None)
+
+
+def dict_filter(*args: dict, **kwargs: Any) -> dict:
+    """
+    Merge all values into a single dict with all None values removed.
+    """
+    result = {}
+    for arg in itertools.chain(args, (kwargs,)):
+        dict_filter_update(result, arg)
+    return result
