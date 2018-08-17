@@ -7,12 +7,16 @@ from .api import example_api, second_api
 
 app = web.Application()
 
-api_v1 = api.ApiVersion(
-    example_api,
-    second_api,
-    OpenApiSpec("Example", enable_ui=True),
-)
+api.CORS(
+    api.AioApi(
+        api.ApiVersion(
+            example_api,
+            second_api,
+            OpenApiSpec("Example", enable_ui=True),
+        )
+    ),
+    origins=['http://localhost']
+).add_routes(app)
 
-api.CORS(api.AioApi(api_v1), ['http://localhost']).add_routes(app)
-
+# See http://localhost:8080/api/v1/openapi/ui
 web.run_app(app)
