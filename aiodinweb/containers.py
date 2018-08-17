@@ -1,15 +1,16 @@
 import logging
 import json
 
-from aiohttp.web import Application, RouteDef, route
+from aiohttp.web import Application
 from functools import partial
 from http import HTTPStatus
 from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional
 
 from . import constants
 from . import content_type_resolvers
-from .data_structures import UrlPath, EmptyPath, Parameter, RootPath, MiddlewareList
+from .data_structures import UrlPath, EmptyPath, Parameter
 from .exceptions import ImmediateHttpResponse
+from .middleware import MiddlewareList
 from .resources import Error
 from .operation import Operation, OperationFunction, Methods
 from .web import Request, Response
@@ -317,7 +318,7 @@ class ApiInterface(ApiContainer):
         try:
             # Apply request middleware
             handler = partial(self._dispatch, operation=operation)
-            for middleware in self.middleware.dispatch:
+            for middleware in self.middleware.request:
                 handler = partial(middleware, handler=handler)
 
             response = await handler(request)
@@ -340,18 +341,16 @@ class AioApi(ApiInterface):
     """
     API Interface for AIO-HTTP
     """
-    def _bound_callback(self, operation: Operation):
-        async def callback(request: Request) -> Response:
+    def _bound_operation(self, operation: Operation):
+        async def bound_operation(request: Request) -> Response:
             return await self.dispatch(operation, request)
-        return callback
-
-    def _routes(self) -> Iterable[RouteDef]:
-        for url_path, operation in self.op_paths():
-            for method in operation.methods:
-                yield route(method, url_path.format(), self._bound_callback(operation))
+        return bound_operation
 
     def add_routes(self, app: Application) -> None:
         """
         Setup routes
         """
-        app.add_routes(self._routes())
+        router = app.router
+        for url_path, operation in self.op_paths():
+            for method in operation.methods:
+                router.add_route(method, url_path.format(), self._bound_operation(operation))
