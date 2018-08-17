@@ -53,7 +53,7 @@ class ApiContainer:
         """
         Decorate a method as an operation and append to container.
         """
-        return self._decorator(path=path, **kwargs)
+        return self._decorator(None, path, **kwargs)
 
     def listing(self, func: OperationFunction=None, *,
                 path: UrlPath.Atoms=EmptyPath,
