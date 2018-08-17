@@ -1,10 +1,11 @@
 import logging
 import json
 
-from aiohttp.web import Application
+from aiohttp.web import Application, StreamResponse
 from functools import partial
 from http import HTTPStatus
-from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional
+from operator import attrgetter
+from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional, List
 
 from . import constants
 from . import content_type_resolvers
@@ -20,11 +21,107 @@ CODECS = {
 }
 
 
+class ResourceApiType(type):
+    """
+    Meta class that resolves operations to routes.
+    """
+    def __new__(mcs, name: str, bases: Sequence[type], attrs: Dict[str, Any]) -> 'ResourceApiType':
+        super_new = super().__new__
+
+        if name == 'NewBase' and attrs == {}:
+            return super_new(mcs, name, bases, attrs)
+
+        parents = [
+            b for b in bases
+            if isinstance(b, ResourceApiType) and not (b.__name__ == 'NewBase' and b.__mro__ == (b, object))
+        ]
+        if not parents:
+            # If this isn't a subclass of don't do anything special.
+            return super_new(mcs, name, bases, attrs)
+
+        # Determine the resource used by this API (handle inherited resources)
+        api_resource = attrs.get('resource')
+        if api_resource is None:
+            for base in bases:
+                api_resource = getattr(base, 'resource')
+                if api_resource:
+                    break
+
+        new_class = super_new(mcs, name, bases, attrs)
+
+        # Get operations
+        operations = []
+        for obj in attrs.values():
+            if isinstance(obj, Operation):
+                operations.append(obj)
+                obj.bind_to_instance(new_class)
+
+        # Get routes from parent objects
+        for parent in parents:
+            parent_operations = getattr(parent, '_operations', None)
+            if parent_operations:
+                operations.extend(parent_operations)
+
+        # Populate operations
+        new_class.operations = sorted(operations, key=attrgetter('sort_key'))
+
+        return new_class
+
+
+class ResourceApi(metaclass=ResourceApiType):
+    """
+    Base class for APIs that manage a particular resource type.
+    """
+    name: str = None
+    """
+    Name of the API resource
+    """
+
+    resource = None
+    """
+    The Odin resource this API is modelled on.
+    """
+
+    path_prefix: UrlPath = EmptyPath
+    """
+    Prefix to prepend to any generated path.
+    """
+
+    parent: 'ApiContainer' = None
+    """
+    Parent API container
+    """
+
+    operations: List[Operation] = None
+    """
+    Operations added to this api. This is populated by Metaclass
+    """
+
+    def __init__(self):
+        if not self.name:
+            self.name = None
+
+        # Append APIs name to path prefix
+        self.path_prefix /= self.name
+
+    def items(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, Operation]]:
+        """
+        Return `URLPath`, `Operation` pairs.
+        """
+        if path_base:
+            path_base = path_base / self.path_prefix
+        else:
+            path_base = self.path_prefix or UrlPath()
+
+        for operation in self.operations:
+            yield from operation.items(path_base)
+
+
 class ApiContainer:
     """
     Container for Operations that come together to form an API
     """
-    def __init__(self, *children: Union['ApiContainer', Operation],
+    def __init__(self, *children: Union['ApiContainer', Operation, ResourceApi],
                  name: str=None, path_prefix: UrlPath.Atoms=None) -> None:
         self.children = list(children)
         self.name = name
@@ -102,7 +199,7 @@ class ApiContainer:
         kwargs['methods'] = methods
         return self._decorator(func, path, **kwargs)
 
-    def op_paths(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, Operation]]:
+    def items(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, Operation]]:
         """
         Return `URLPath`, `Operation` pairs.
         """
@@ -112,7 +209,7 @@ class ApiContainer:
             path_base = self.path_prefix or UrlPath()
 
         for child in self.children:
-            yield from child.op_paths(path_base)
+            yield from child.items(path_base)
 
 
 class ApiCollection(ApiContainer):
@@ -126,7 +223,7 @@ class ApiVersion(ApiCollection):
     """
     A specific version of the API
     """
-    def __init__(self, *children: Union['ApiContainer', Operation],
+    def __init__(self, *children: Union['ApiContainer', Operation, ResourceApi],
                  version: int=1, version_template: str='v{}', **kwargs):
         self.version = version
         self.version_template = version_template
@@ -263,7 +360,7 @@ class ApiInterface(ApiContainer):
         else:
             return resource, None, None
 
-    async def _dispatch(self, request: Request, operation: Operation) -> Response:
+    async def _dispatch(self, request: Request, operation: Operation) -> StreamResponse:
         """
         Wrapped dispatch method, prepare request and generate a HTTP Response.
         """
@@ -303,13 +400,13 @@ class ApiInterface(ApiContainer):
         resource, status, headers = await self._dispatch_operation(request, operation)
 
         # Return a HttpResponse and just send it!
-        if isinstance(resource, Response):
+        if isinstance(resource, StreamResponse):
             return resource
 
         # Encode the response
         return Response.create(request, resource, status, headers)
 
-    async def dispatch(self, operation: Operation, request: Request) -> Response:
+    async def dispatch(self, operation: Operation, request: Request) -> StreamResponse:
         """
         Dispatch incoming request and capture top level exceptions.
         """
@@ -342,7 +439,7 @@ class AioApi(ApiInterface):
     API Interface for AIO-HTTP
     """
     def _bound_operation(self, operation: Operation):
-        async def bound_operation(request: Request) -> Response:
+        async def bound_operation(request: Request) -> StreamResponse:
             return await self.dispatch(operation, request)
         return bound_operation
 
@@ -351,6 +448,6 @@ class AioApi(ApiInterface):
         Setup routes
         """
         router = app.router
-        for url_path, operation in self.op_paths():
+        for url_path, operation in self.items():
             for method in operation.methods:
                 router.add_route(method, url_path.format(), self._bound_operation(operation))
