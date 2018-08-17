@@ -12,6 +12,7 @@ __copyright__ = "Copyright (C) 2018 Tim Savage"
 from .containers import (
     ApiCollection,
     ApiVersion,
+    AioApi,
 )
 from .decorators import (
     operation,

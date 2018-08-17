@@ -1,7 +1,8 @@
 import logging
 import json
-from functools import partial
 
+from aiohttp.web import Application, RouteDef, route
+from functools import partial
 from http import HTTPStatus
 from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional
 
@@ -174,7 +175,7 @@ class ApiInterface(ApiContainer):
     """
 
     def __init__(self, *children: Union['ApiContainer', Operation],
-                 name: str='api', path_prefix: UrlPath.Atoms=RootPath,
+                 name: str='api', path_prefix: UrlPath.Atoms=None,
                  debug_enabled: bool=False, provide_options: bool=True,
                  middleware: list=None, logger: logging.Logger=None) -> None:
         """
@@ -222,9 +223,12 @@ class ApiInterface(ApiContainer):
             extra={'status': HTTPStatus.INTERNAL_SERVER_ERROR, 'request': request}
         )
 
-        return Error.from_status(HTTPStatus.INTERNAL_SERVER_ERROR), HTTPStatus.INTERNAL_SERVER_ERROR, None
+        return (
+            Error.from_status(HTTPStatus.INTERNAL_SERVER_ERROR),
+            HTTPStatus.INTERNAL_SERVER_ERROR, None
+        )
 
-    async def _dispatch_operation(self, operation: Operation, request: Request) \
+    async def _dispatch_operation(self, request: Request, operation: Operation) \
             -> Tuple[Any, Optional[HTTPStatus], Optional[Dict[str, str]]]:
         """
         Dispatch and handle exceptions from operation.
@@ -246,19 +250,19 @@ class ApiInterface(ApiContainer):
             resource = Error.from_status(HTTPStatus.NOT_IMPLEMENTED)
             return resource, HTTPStatus.NOT_IMPLEMENTED, None
 
-        except Exception as e:
+        except Exception as ex:
             if self.debug_enabled:
                 # If debug is enabled then fallback to the frameworks default
                 # error processing, this often provides convenience features
                 # to aid in the debugging process.
                 raise
 
-            return await self.handle_500(request, e)
+            return await self.handle_500(request, ex)
 
         else:
             return resource, None, None
 
-    async def _dispatch(self, operation: Operation, request: Request) -> Response:
+    async def _dispatch(self, request: Request, operation: Operation) -> Response:
         """
         Wrapped dispatch method, prepare request and generate a HTTP Response.
         """
@@ -269,8 +273,10 @@ class ApiInterface(ApiContainer):
             request.request_codec = self.registered_codecs[request_type]
             request.request_codec.content_type = request_type
         except KeyError:
-            return Response(text="Unknown request content-type",
-                            status=HTTPStatus.UNPROCESSABLE_ENTITY)
+            return Response.from_status(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                reason="Unknown request content-type",
+            )
 
         response_type = content_type_resolvers.resolve(self.response_type_resolvers, request)
         response_type = self.remap_content_types.get(response_type, response_type)
@@ -278,19 +284,22 @@ class ApiInterface(ApiContainer):
             request.response_codec = self.registered_codecs[response_type]
             request.response_codec.content_type = response_type
         except KeyError:
-            return Response(text="Unknown response content-type",
-                            status=HTTPStatus.NOT_ACCEPTABLE)
+            return Response.from_status(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                reason="Unknown response content-type",
+            )
 
         # Check if method is in our allowed method list
         if request.method not in operation.methods:
-            pass
-            # return HttpResponse.from_status(
-            #     HTTPStatus.METHOD_NOT_ALLOWED,
-            #     {'Allow': ','.join(m.value for m in operation.methods)}
-            # )
+            return Response.from_status(
+                HTTPStatus.METHOD_NOT_ALLOWED,
+                headers={
+                    'Allow': ','.join(m.value for m in operation.methods)
+                }
+            )
 
         # Response types
-        resource, status, headers = await self._dispatch_operation(operation, request)
+        resource, status, headers = await self._dispatch_operation(request, operation)
 
         # Return a HttpResponse and just send it!
         if isinstance(resource, Response):
@@ -298,3 +307,51 @@ class ApiInterface(ApiContainer):
 
         # Encode the response
         return Response.create(request, resource, status, headers)
+
+    async def dispatch(self, operation: Operation, request: Request) -> Response:
+        """
+        Dispatch incoming request and capture top level exceptions.
+        """
+        request.current_operation = operation
+
+        try:
+            # Apply request middleware
+            handler = partial(self._dispatch, operation=operation)
+            for middleware in self.middleware.dispatch:
+                handler = partial(middleware, handler=handler)
+
+            response = await handler(request)
+
+        except Exception as ex:
+            if self.debug_enabled:
+                # If debug is enabled then fallback to the frameworks default
+                # error processing, this often provides convenience features
+                # to aid in the debugging process.
+                raise
+
+            resource, status, headers = await self.handle_500(request, ex)
+            return Response.create(request, resource, status, headers)
+
+        else:
+            return response
+
+
+class AioApi(ApiInterface):
+    """
+    API Interface for AIO-HTTP
+    """
+    def _bound_callback(self, operation: Operation):
+        async def callback(request: Request) -> Response:
+            return await self.dispatch(operation, request)
+        return callback
+
+    def _routes(self) -> Iterable[RouteDef]:
+        for url_path, operation in self.op_paths():
+            for method in operation.methods:
+                yield route(method, url_path.format(), self._bound_callback(operation))
+
+    def add_routes(self, app: Application) -> None:
+        """
+        Setup routes
+        """
+        app.add_routes(self._routes())
