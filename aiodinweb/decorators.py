@@ -14,6 +14,19 @@ def operation(path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Op
     return inner
 
 
+def route(func: OperationFunction=None, *,
+          path: UrlPath.Atoms=EmptyPath,
+          **kwargs) -> Callable[[OperationFunction], Operation]:
+    """
+    Basic api route
+
+    This applies defaults commonly associated with a listing of resources.
+    """
+    def inner(f: OperationFunction) -> Operation:
+        return Operation(f, path, **kwargs)
+    return inner(func) if func else inner
+
+
 def listing(func: OperationFunction=None, *,
             path: UrlPath.Atoms=EmptyPath,
             **kwargs) -> Callable[[OperationFunction], Operation]:
@@ -64,6 +77,21 @@ def update(func: OperationFunction, *,
     Update operation
 
     This applies defaults commonly associated with an update of a resource.
+    """
+    def inner(f: OperationFunction) -> Operation:
+        kwargs['methods'] = methods
+        return Operation(f, path, **kwargs)
+    return inner(func) if func else inner
+
+
+def patch(func: OperationFunction, *,
+          path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
+          methods: Methods=constants.Method.Patch,
+          **kwargs) -> Callable[[OperationFunction], Operation]:
+    """
+    Patch operation
+
+    This applies defaults commonly associated with patching a resource.
     """
     def inner(f: OperationFunction) -> Operation:
         kwargs['methods'] = methods
