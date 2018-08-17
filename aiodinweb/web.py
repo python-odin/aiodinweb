@@ -7,6 +7,7 @@ class Request(web.Request):
     """
     Incoming HTTP request
     """
+    current_operation = None
     request_codec: Any = None
     response_codec: Any = None
 
@@ -30,7 +31,8 @@ class Response(web.Response):
         if body is None:
             return cls(
                 status=status or HTTPStatus.NO_CONTENT,
-                headers=headers
+                headers=headers,
+                content_type=request.response_codec.content_type
             )
         else:
             body = request.response_codec.dumps(body)
@@ -39,3 +41,24 @@ class Response(web.Response):
                 status=status or HTTPStatus.OK,
                 content_type=request.response_codec.content_type
             )
+
+    @classmethod
+    def from_status(cls, status: HTTPStatus, *,
+                    reason: str=None,
+                    description: str=None,
+                    headers: Dict[str, str]=None) -> 'Response':
+        """
+        Generate a response from a Status code
+        :param status: HTTP Status code
+        :param reason: Error reason (defaults to phrase of HTTPStatus)
+        :param description: Error description (defaults to description of
+            HTTPStatus)
+        :param headers: Any headers.
+
+        """
+        return cls(
+            status=status,
+            reason=reason or status.phrase,
+            text=description or status.description,
+            headers=headers,
+        )
