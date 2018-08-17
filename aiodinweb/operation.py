@@ -1,11 +1,11 @@
-from functools import partial
-
 from aiohttp import web
+from functools import partial
 from typing import Callable, Awaitable, Union, Sequence, Set, Iterable, Tuple, Dict, Any
 
-from aiodinweb.utils import cached_property
 from . import constants
-from .data_structures import Parameter, UrlPath, MiddlewareList
+from .data_structures import Parameter, UrlPath
+from .middleware import MiddlewareList
+from .utils import cached_property
 from .utils.sequences import force_tuple, dict_filter
 from .web import Request, Response
 
@@ -27,6 +27,7 @@ class Operation:
     def __init__(self, func: OperationFunction, path: UrlPath.Atoms, *,
                  methods: Methods=constants.Method.Get,
                  tags: Union[str, Sequence[str]]=None,
+                 operation_id=None,
                  summary: str=None,
                  middleware: Sequence[object]=None) -> None:
         """
@@ -55,6 +56,7 @@ class Operation:
 
         # Documentation
         self._tags = set(force_tuple(tags)) if tags else EmptySet
+        self.operation_id = operation_id
         self.summary = summary
         self.deprecated = False
         self.parameters: Set[Parameter] = set()
@@ -126,18 +128,10 @@ class Operation:
         """
         Generate OpenAPI documentation
         """
-        return dict_filter(
-            operationId=self.operation_id,
-        )
-
-    @cached_property
-    def operation_id(self) -> str:
-        """
-        Unique identifier of a specific operation
-        """
         func = self.base_func
-        value = getattr(func, 'operation_id', None)
-        return value or f"{func.__module__}.{func.__name__}"
+        return dict_filter(
+            operationId=self.operation_id or f"{func.__module__}.{func.__name__}",
+        )
 
     @property
     def tags(self) -> Set[str]:
