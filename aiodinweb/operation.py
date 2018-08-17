@@ -70,7 +70,7 @@ class Operation:
             else:
                 setattr(self, attr, value)
 
-    async def __call__(self, request: Request) -> Response:
+    async def __call__(self, request: Request) -> Any:
         """
         Main wrapper around the operation function.
         """
@@ -102,7 +102,7 @@ class Operation:
         self.binding = instance
         self.middleware.append(instance)
 
-    def op_paths(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, 'Operation']]:
+    def items(self, path_base: UrlPath.Atoms=None) -> Iterable[Tuple[UrlPath, 'Operation']]:
         """
         Return `URLPath`, `Operation` pairs.
         """

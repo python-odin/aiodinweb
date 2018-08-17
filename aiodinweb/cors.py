@@ -69,7 +69,7 @@ class CORS:
         """
         # Collapse into a Path->Method dictionary
         paths = defaultdict(set)
-        for path, operation in api_interface.op_paths():
+        for path, operation in api_interface.items():
             paths[path].update(operation.methods)
 
         for path, methods in paths.items():

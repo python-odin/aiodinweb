@@ -26,10 +26,12 @@ from .cors import (
 )
 from .decorators import (
     operation,
+    route,
     listing,
     create,
     detail,
     update,
+    patch,
     delete,
 )
 from .exceptions import (
