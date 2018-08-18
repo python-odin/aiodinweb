@@ -1,4 +1,8 @@
+import datetime
 import enum
+import odin
+
+from odin.fields.base import BaseField
 
 
 class Method(str, enum.Enum):
@@ -28,22 +32,32 @@ class DataType(enum.Enum):
     """
     Primitive data types in the OAS are based on the types supported.
     """
-    Integer = ('integer', 'int32')
-    Long = ('integer', 'int64')
-    Float = ('number', 'float')
-    Double = ('number', 'double')
-    String = ('string', None)
-    Byte = ('string', 'byte')
-    Binary = ('string', 'binary')
-    Boolean = ('boolean', None)
-    Date = ('string', 'date')
-    DateTime = ('string', 'date-time')
-    Password = ('string', 'password')
+    Integer = 'integer', 'int32', int, odin.IntegerField
+    Long = 'integer', 'int64', int, odin.IntegerField
+    Float = 'number', 'float', float, odin.FloatField
+    Double = 'number', 'double', float, odin.FloatField
+    String = 'string', None, str, odin.StringField
+    Byte = 'string', 'byte', bytes, None
+    Binary = 'string', 'binary', bytes, None
+    Boolean = 'boolean', None, bool, odin.BooleanField
+    Date = 'string', 'date', datetime.date, odin.DateField
+    Time = 'string', 'time', datetime.time, odin.TimeField
+    DateTime = 'string', 'date-time', datetime.datetime, odin.DateTimeField
+    Email = 'string', 'email', str, odin.EmailField
+    IPv4 = 'string', 'ipv4', str, odin.IPv4Field
+    IPv6 = 'string', 'ipv6', str, odin.IPv6Field
+    Uri = 'string', 'uri', str, odin.UrlField
+    Regex = 'string', 'regex', str, odin.StringField
+    Password = 'string', 'password', str, odin.StringField
 
-    @property
-    def type(self):
-        return self.value[0]
+    def __new__(cls, type_: str, format_: str, native_type: type, odin_field: BaseField) -> 'DataType':
+        instance = object.__new__(cls)
+        instance._value_ = f"{type_}:{format_}" if format_ else type_
+        instance.type = type_
+        instance.format = format_
+        instance.native_type = native_type
+        instance.odin_field = odin_field
+        return instance
 
-    @property
-    def format(self):
-        return self.value[1]
+    def __str__(self):
+        return self.type
