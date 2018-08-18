@@ -55,7 +55,7 @@ class Operation:
         self.security = None
 
         # Documentation
-        self._tags = set(force_tuple(tags)) if tags else EmptySet
+        self._tags: Set[str] = set(force_tuple(tags)) if tags else EmptySet
         self.operation_id = operation_id
         self.summary = summary
         self.deprecated = False
@@ -79,7 +79,10 @@ class Operation:
         for middleware in self.middleware.dispatch:
             handler = partial(middleware, handler=handler)
 
-        return await handler(request)
+        if self.binding:
+            return await handler(self.binding, request)
+        else:
+            return await handler(request)
 
     def __eq__(self, other: 'Operation') -> bool:
         if isinstance(other, Operation):
@@ -124,17 +127,31 @@ class Operation:
 
     # Docs ##########################################################
 
+    def _responses_spec(self):
+        responses = {
+            'default': {'$ref': '#/components/schemas/Error'}
+        }
+        return responses
+
     def to_openapi(self) -> Dict[str, Any]:
         """
         Generate OpenAPI documentation
         """
         func = self.base_func
         return dict_filter(
+            tags=self.tags,
+            summary=self.summary,
+            decription=self.__doc__.strip(),
             operationId=self.operation_id or f"{func.__module__}.{func.__name__}",
+            parameters=None,
+            requestBody=None,
+            responses=self._responses_spec(),
+            security=None,
+            deprecated=True if self.deprecated else None,
         )
 
     @property
-    def tags(self) -> Set[str]:
+    def tags(self) -> Tuple[str]:
         """
         Tags associated with this operation
         """
@@ -145,4 +162,4 @@ class Operation:
             binding_tags = getattr(self.binding, 'tags', None)
             if binding_tags:
                 tags.update(binding_tags)
-        return tags
+        return tuple(tags)
