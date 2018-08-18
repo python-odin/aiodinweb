@@ -9,15 +9,17 @@ from aiohttp.web_fileresponse import FileResponse
 from http import HTTPStatus
 from itertools import chain
 from pathlib import Path
-from typing import Dict, Any, Tuple, List, NamedTuple, Sequence
+from typing import Dict, Any, List, NamedTuple, Sequence
 
 from .containers import ResourceApi, ApiContainer
 from .data_structures import RootPath, EmptyPath, UrlPath
 from .exceptions import HttpError
 from .operation import Operation
+from .resources import Error
 from .web import Request, Response
 from .utils import cached_property
 from .utils.sequences import dict_filter
+from .json_schema import resource_schema
 
 
 class Server(NamedTuple):
@@ -115,6 +117,36 @@ class OpenApiSpec(ResourceApi):
         """
         return self.base_path / self.name
 
+    def parse_operations(self):
+        """
+        Generate OpenAPI paths and components list.
+
+        Parse operations into Path -> Method -> Operation structure.
+
+        """
+        resources = {Error}
+
+        paths = collections.OrderedDict()
+        for path, operation in self.parent.items():
+            # Filter out Open API endpoints
+            if self.OPENAPI_TAG in operation.tags:
+                continue
+
+            # Cut of first item (will be the parents path)
+            path = RootPath / path[1:]
+
+            # Generate a formatted path
+            path_spec = paths.setdefault(path.format(), {})
+
+            # Add methods
+            for method in operation.methods:
+                path_spec[method.lower()] = operation.to_openapi()
+
+        return (
+            paths,
+            dict(resource_schema(r) for r in resources)
+        )
+
     def servers_spec(self, request: Request) -> List[Dict[str, Any]]:
         """
         Generate OpenAPI servers list
@@ -131,32 +163,6 @@ class OpenApiSpec(ResourceApi):
             for s in chain(self.base_servers, self.additional_servers or [])
         ]
 
-    def path_component_specs(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Generate OpenAPI paths and components list.
-
-        Parse operations into Path -> Method -> Operation structure.
-
-        """
-        paths = collections.OrderedDict()
-
-        for path, operation in self.parent.items():
-            # Filter out Open API endpoints
-            if self.OPENAPI_TAG in operation.tags:
-                continue
-
-            # Cut of first item (will be the parents path)
-            path = RootPath / path[1:]
-
-            # Generate a formatted path
-            path_spec = paths.setdefault(path.format(), {})
-
-            # Add methods
-            for method in operation.methods:
-                path_spec[method.lower()] = operation.to_openapi()
-
-        return paths, {}
-
     def security_schemes(self) -> Dict[str, List[str]]:
         """
         Generate OpenAPI security schemes.
@@ -166,17 +172,22 @@ class OpenApiSpec(ResourceApi):
         """
         Generate OpenAPI specification of attached API.
         """
-        paths, components = self.path_component_specs()
+        paths, schema_defs = self.parse_operations()
+
         return dict_filter(
             openapi='3.0.1',
-            info={
-                'title': self.title,
-                'description': self.description,
-                'version': str(getattr(self.parent, 'version', 0)),
-            },
+            info=dict_filter(
+                title=self.title,
+                description=self.description,
+                version=getattr(self.parent, 'version', 0),
+            ),
             servers=self.servers_spec(request),
             paths=paths,
-            components=components,
+            components=dict_filter(
+                schemas=schema_defs,
+                responses=None,
+                parameters=None,
+            ),
             security=self.security_schemes(),
         )
 
