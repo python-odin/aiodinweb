@@ -1,9 +1,9 @@
 import logging
-import json
 
 from aiohttp.web import Application, StreamResponse
 from functools import partial
 from http import HTTPStatus
+from odin.codecs import json_codec
 from operator import attrgetter
 from typing import Union, Callable, Iterable, Tuple, Sequence, Dict, Any, Optional, List
 
@@ -17,7 +17,7 @@ from .operation import Operation, OperationFunction, Methods
 from .web import Request, Response
 
 CODECS = {
-    'application/json': json,
+    'application/json': json_codec,
 }
 
 
@@ -446,6 +446,13 @@ class AioApi(ApiInterface):
             return await self.dispatch(operation, request)
         return bound_operation
 
+    @staticmethod
+    def _parameter_formatter(parameter: Parameter) -> str:
+        """
+        Format a parameter to be consumable by the `UrlPath.parse`.
+        """
+        return f"{{{parameter.name}}}"
+
     def add_routes(self, app: Application) -> None:
         """
         Setup routes
@@ -453,4 +460,7 @@ class AioApi(ApiInterface):
         router = app.router
         for url_path, operation in self.items():
             for method in operation.methods:
-                router.add_route(method, url_path.format(), self._bound_operation(operation))
+                router.add_route(
+                    method, url_path.format(self._parameter_formatter),
+                    self._bound_operation(operation)
+                )

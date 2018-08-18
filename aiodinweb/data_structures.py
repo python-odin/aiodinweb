@@ -201,8 +201,8 @@ class UrlPath(tuple):
         Format a parameter to be consumable by the `UrlPath.parse`.
         """
         args = [parameter.name]
-        # if parameter.type:
-        #     args.append(path_node.type.name)
+        if parameter.data_type:
+            args.append(parameter.data_type.name)
         # if path_node.type_args:
         #     args.append(path_node.type_args)
         return "{{{}}}".format(':'.join(args))
