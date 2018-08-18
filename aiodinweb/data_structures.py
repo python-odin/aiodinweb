@@ -1,8 +1,9 @@
 import re
 
-from typing import Union, Sequence, Iterable, Callable
+from typing import Union, Sequence, Iterable, Callable, Dict, Any
 
 from . import constants
+from .utils.sequences import dict_filter
 
 
 class Parameter:
@@ -14,7 +15,8 @@ class Parameter:
     def __init__(self, name: str, in_: constants.In, *,
                  description: str=None,
                  required: bool=None,
-                 allow_empty: bool=None):
+                 allow_empty: bool=None,
+                 data_type: constants.DataType=None):
         """
         :param name: The name of the parameter
         :param in_: The location of the parameter
@@ -27,6 +29,7 @@ class Parameter:
         self.description = description
         self.required = required
         self.allow_empty = allow_empty
+        self.data_type = data_type
 
     def __hash__(self):
         return hash(self.name + str(self.in_))
@@ -45,6 +48,19 @@ class Parameter:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r}, {self.in_!r})"
+
+    def to_openapi(self) -> Dict[str, Any]:
+        """
+        Generate OpenAPI documentation
+        """
+        return dict_filter({
+            'name': self.name,
+            'in': self.in_,
+            'description': self.description,
+            'required': True if self.in_ == constants.In.Path else self.required,
+            'allow_empty': self.allow_empty if self.in_ == constants.In.Query else None,
+            'schema': dict_filter({'type': self.data_type.type, 'format': self.data_type.format}),
+        })
 
 
 # Name scheme that follows Python names rules for variables
@@ -98,13 +114,13 @@ class UrlPath(tuple):
                 # Parse out name and type
                 name, param_type, param_arg = m.groups()
                 try:
-                    type_ = constants.DataType[param_type]
+                    data_type = constants.DataType[param_type]
                 except KeyError:
                     if param_type is not None:
                         raise ValueError(f"Unknown param type `{param_type}` in: {atom}")
-                    type_ = constants.DataType.Integer
+                    data_type = constants.DataType.String
 
-                atoms.append(Parameter(name, constants.In.Path, required=True))
+                atoms.append(Parameter(name, constants.In.Path, required=True, data_type=data_type))
             else:
                 atoms.append(atom)
 

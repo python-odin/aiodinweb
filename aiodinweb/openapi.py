@@ -142,6 +142,10 @@ class OpenApiSpec(ResourceApi):
             for method in operation.methods:
                 path_spec[method.lower()] = operation.to_openapi()
 
+            # Add parameters
+            if path.parameters:
+                path_spec['parameters'] = [p.to_openapi() for p in path.parameters]
+
         return (
             paths,
             dict(resource_schema(r) for r in resources)

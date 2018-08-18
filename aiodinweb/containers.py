@@ -172,7 +172,8 @@ class ApiContainer:
         return self._decorator(func, path, **kwargs)
 
     def detail(self, func: OperationFunction=None, *,
-               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path,
+                                                       data_type=constants.DataType.String)),
                **kwargs) -> Callable[[OperationFunction], Operation]:
         """
         Detail operation
@@ -180,7 +181,8 @@ class ApiContainer:
         return self._decorator(func, path, **kwargs)
 
     def update(self, func: OperationFunction=None, *,
-               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path,
+                                                       data_type=constants.DataType.String)),
                methods: Methods = constants.Method.Put,
                **kwargs) -> Callable[[OperationFunction], Operation]:
         """
@@ -190,7 +192,8 @@ class ApiContainer:
         return self._decorator(func, path, **kwargs)
 
     def delete(self, func: OperationFunction=None, *,
-               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path)),
+               path: UrlPath.Atoms = UrlPath(Parameter('resource_id', constants.In.Path,
+                                                       data_type=constants.DataType.String)),
                methods: Methods = constants.Method.Delete,
                **kwargs) -> Callable[[OperationFunction], Operation]:
         """

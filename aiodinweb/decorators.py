@@ -56,7 +56,8 @@ def create(func: OperationFunction=None, *,
 
 
 def detail(func: OperationFunction=None, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
+           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
+                                                 data_type=constants.DataType.String)),
            **kwargs) -> Callable[[OperationFunction], Operation]:
     """
     Detail operation
@@ -70,7 +71,8 @@ def detail(func: OperationFunction=None, *,
 
 
 def update(func: OperationFunction, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
+           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
+                                                 data_type=constants.DataType.String)),
            methods: Methods=constants.Method.Put,
            **kwargs) -> Callable[[OperationFunction], Operation]:
     """
@@ -85,7 +87,8 @@ def update(func: OperationFunction, *,
 
 
 def patch(func: OperationFunction, *,
-          path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
+          path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
+                                                data_type=constants.DataType.String)),
           methods: Methods=constants.Method.Patch,
           **kwargs) -> Callable[[OperationFunction], Operation]:
     """
@@ -100,7 +103,8 @@ def patch(func: OperationFunction, *,
 
 
 def delete(func: OperationFunction, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path)),
+           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
+                                                 data_type=constants.DataType.String)),
            methods: Methods=constants.Method.Delete,
            **kwargs) -> Callable[[OperationFunction], Operation]:
     """
