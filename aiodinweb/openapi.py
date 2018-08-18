@@ -7,8 +7,9 @@ import collections
 
 from aiohttp.web_fileresponse import FileResponse
 from http import HTTPStatus
+from itertools import chain
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List, NamedTuple, Sequence
 
 from .containers import ResourceApi, ApiContainer
 from .data_structures import RootPath, EmptyPath, UrlPath
@@ -19,13 +20,29 @@ from .utils import cached_property
 from .utils.sequences import dict_filter
 
 
+class Server(NamedTuple):
+    """
+    Definition of a server, the url may contain a single %(host)s to represent
+    the current host.
+
+    This definition does not support OpenAPI 3.0.1 template URLs. % formatting
+    is used however to allow for {} style templates in the future.
+    """
+    base_url: str
+    description: str = None
+
+
 class OpenApiSpec(ResourceApi):
     """
     Open API specification.
 
     :param title: Title of the OpenAPI spec.
+    :param description: Description of the OpenAPI spec.
     :param name: Name of the URL, this is used in the URL; default is
         `openapi`.
+    :param additional_servers: List of additional locations that serves this
+        API.
+    :param host: Override identified host, useful for reverse proxies.
     :param enable_ui: Enable Swagger UI. This will enable both serving of the
         Swagger UI HTML as well as static content required to enable it. The
         default build uses the interface provided by
@@ -38,13 +55,22 @@ class OpenApiSpec(ResourceApi):
     """
     OPENAPI_TAG = '__openapi'
 
+    base_servers: Sequence[Server] = [Server('%(host)s%(base)s', 'Current host')]
+
     def __init__(self, title: str, *,
+                 description: str=None,
+                 additional_servers: Sequence[Server]=None,
+                 host: str=None,
                  name: str='openapi',
                  enable_ui: bool=False,
                  static_path: Path=Path(__file__).parent / 'static-ui'):
         self.name = name
         super().__init__()
+
         self.title = title
+        self.description = description
+        self.additional_servers = additional_servers
+        self.host = host
         self.static_path = static_path
 
         # Configure operations
@@ -89,15 +115,32 @@ class OpenApiSpec(ResourceApi):
         """
         return self.base_path / self.name
 
-    def parse_operations(self, api_base: ApiContainer) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def servers_spec(self, request: Request) -> List[Dict[str, Any]]:
         """
+        Generate OpenAPI servers list
+        """
+        host = self.host
+        if not host:
+            # Determine the host from the current request
+            host = f'{request.scheme}://{request.host}'
+        format_dict = {'host': host, 'base': self.base_path}
+
+        # Convert into dictionaries and apply formatting.
+        return [
+            {'url': (s.base_url % format_dict), 'description': s.description}
+            for s in chain(self.base_servers, self.additional_servers or [])
+        ]
+
+    def path_component_specs(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Generate OpenAPI paths and components list.
+
         Parse operations into Path -> Method -> Operation structure.
 
-        Will also return definitions of any resources used.
         """
         paths = collections.OrderedDict()
 
-        for path, operation in api_base.items():
+        for path, operation in self.parent.items():
             # Filter out Open API endpoints
             if self.OPENAPI_TAG in operation.tags:
                 continue
@@ -114,23 +157,27 @@ class OpenApiSpec(ResourceApi):
 
         return paths, {}
 
-    async def openapi_get(self, _: Request) -> Dict[str, Any]:
+    def security_schemes(self) -> Dict[str, List[str]]:
+        """
+        Generate OpenAPI security schemes.
+        """
+
+    async def openapi_get(self, request: Request) -> Dict[str, Any]:
         """
         Generate OpenAPI specification of attached API.
         """
-        api_base = self.parent
-        paths, components = self.parse_operations(api_base)
+        paths, components = self.path_component_specs()
         return dict_filter(
             openapi='3.0.1',
             info={
                 'title': self.title,
-                'version': str(getattr(api_base, 'version', 0)),
+                'description': self.description,
+                'version': str(getattr(self.parent, 'version', 0)),
             },
-            servers=None,
+            servers=self.servers_spec(request),
             paths=paths,
             components=components,
-            tags=None,
-            externalDocs=None,
+            security=self.security_schemes(),
         )
 
     async def get_ui(self, _: Request) -> Response:
