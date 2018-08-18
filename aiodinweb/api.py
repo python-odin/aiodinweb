@@ -14,6 +14,7 @@ from .containers import (
     ApiCollection,
     ApiVersion,
     AioApi,
+    ResourceApi,
 )
 from .constants import (
     Method,
