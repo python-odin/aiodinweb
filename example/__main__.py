@@ -2,7 +2,7 @@ from aiohttp import web
 from aiodinweb import api
 from aiodinweb.openapi import OpenApiSpec
 
-from .api import example_api, second_api
+from .api import ExampleApi, second_api
 
 
 app = web.Application()
@@ -10,13 +10,14 @@ app = web.Application()
 api.CORS(
     api.AioApi(
         api.ApiVersion(
-            example_api,
+            ExampleApi(),
             second_api,
+
+            # See http://localhost:8080/api/v1/openapi/ui
             OpenApiSpec("Example", enable_ui=True),
         )
     ),
     origins=['http://localhost']
 ).add_routes(app)
 
-# See http://localhost:8080/api/v1/openapi/ui
 web.run_app(app)
