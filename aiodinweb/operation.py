@@ -141,7 +141,7 @@ class Operation:
         return dict_filter(
             tags=self.tags,
             summary=self.summary,
-            decription=self.__doc__.strip(),
+            description=func.__doc__.strip(),
             operationId=self.operation_id or f"{func.__module__}.{func.__name__}",
             parameters=None,
             requestBody=None,
