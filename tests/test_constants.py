@@ -23,4 +23,3 @@ class TestMethod:
         assert 3 == len(values)
         assert constants.Method.Get in values
         assert constants.Method.Head not in values
-
