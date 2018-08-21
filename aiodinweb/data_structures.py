@@ -110,7 +110,7 @@ class UrlPath(tuple):
                 m = PATH_PARAM_RE.match(atom)
                 if not m:
                     raise ValueError(f"Invalid path param: {atom}")
-           
+
                 # Parse out name and type
                 name, param_type, param_arg = m.groups()
                 try:

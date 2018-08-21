@@ -25,3 +25,24 @@ Features:
 
 - Fully type annotated with Python 3.6+ typing support.
 
+
+Contributions
+=============
+
+Contributions are always welcome, however please ensure the following
+guidelines are met to ensure your PR will be accepted.
+
+- AIOdinWeb uses Git-Flow
+
+- Check with Flake8, this must pass
+
+- Ensure type annotations are fully applied.
+
+- Ensure your contribution comes with fast test cases (for PyTest)
+
+- Documentation is generated from code, ensure your contribution is
+  documented.
+
+Thanks!
+
+- 

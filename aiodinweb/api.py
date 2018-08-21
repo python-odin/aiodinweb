@@ -1,3 +1,4 @@
+# flake8: noqa
 """
 AIO Odin Web
 ~~~~~~~~~~~~
