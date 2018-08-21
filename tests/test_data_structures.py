@@ -11,7 +11,7 @@ class TestUrlPath:
     def test_init(self):
         target = data_structures.UrlPath('api', 'path')
 
-        assert ['api', 'path'] == target
+        assert ('api', 'path') == target
 
     def test_add__valid(self):
         left = data_structures.UrlPath('a', 'b', 'c')
@@ -19,7 +19,7 @@ class TestUrlPath:
 
         actual = left + right
 
-        assert ['a', 'b', 'c', 'd', 'e', 'f'] == actual
+        assert ('a', 'b', 'c', 'd', 'e', 'f') == actual
 
     def test_add__other_type(self):
         left = data_structures.UrlPath('a', 'b', 'c')

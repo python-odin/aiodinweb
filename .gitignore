@@ -5,3 +5,4 @@ __pycache__
 
 # IDE cruft
 .idea
+.pytest_cache
