@@ -1,11 +1,19 @@
-from typing import Callable
+from typing import Callable, Union
 
 from . import constants
 from .data_structures import UrlPath, EmptyPath, Parameter
 from .operation import Operation, OperationFunction, Methods
 
 
-def operation(path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Operation]:
+CollectionPath = EmptyPath
+ResourcePath = UrlPath(Parameter('%(resource_key)s', constants.In.Path,
+                                 data_type=constants.DataType.String))
+
+
+OperationDecorator = Callable[[OperationFunction], Union[Operation, OperationFunction]]
+
+
+def operation(path: UrlPath.Atoms, **kwargs) -> OperationDecorator:
     """
     Operation decorator, converts a function into an API operation.
     """
@@ -16,7 +24,7 @@ def operation(path: UrlPath.Atoms, **kwargs) -> Callable[[OperationFunction], Op
 
 def route(func: OperationFunction=None, *,
           path: UrlPath.Atoms=EmptyPath,
-          **kwargs) -> Callable[[OperationFunction], Operation]:
+          **kwargs) -> OperationDecorator:
     """
     Basic api route
 
@@ -28,8 +36,8 @@ def route(func: OperationFunction=None, *,
 
 
 def listing(func: OperationFunction=None, *,
-            path: UrlPath.Atoms=EmptyPath,
-            **kwargs) -> Callable[[OperationFunction], Operation]:
+            path: UrlPath.Atoms=CollectionPath,
+            **kwargs) -> OperationDecorator:
     """
     Listing operation
 
@@ -41,9 +49,9 @@ def listing(func: OperationFunction=None, *,
 
 
 def create(func: OperationFunction=None, *,
-           path: UrlPath.Atoms=EmptyPath,
+           path: UrlPath.Atoms=CollectionPath,
            methods: Methods=constants.Method.Post,
-           **kwargs) -> Callable[[OperationFunction], Operation]:
+           **kwargs) -> OperationDecorator:
     """
     Create operation
 
@@ -56,9 +64,8 @@ def create(func: OperationFunction=None, *,
 
 
 def detail(func: OperationFunction=None, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
-                                                 data_type=constants.DataType.String)),
-           **kwargs) -> Callable[[OperationFunction], Operation]:
+           path: UrlPath.Atoms=ResourcePath,
+           **kwargs) -> OperationDecorator:
     """
     Detail operation
 
@@ -70,11 +77,10 @@ def detail(func: OperationFunction=None, *,
     return inner(func) if func else inner
 
 
-def update(func: OperationFunction, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
-                                                 data_type=constants.DataType.String)),
+def update(func: OperationFunction=None, *,
+           path: UrlPath.Atoms=ResourcePath,
            methods: Methods=constants.Method.Put,
-           **kwargs) -> Callable[[OperationFunction], Operation]:
+           **kwargs) -> OperationDecorator:
     """
     Update operation
 
@@ -86,11 +92,10 @@ def update(func: OperationFunction, *,
     return inner(func) if func else inner
 
 
-def patch(func: OperationFunction, *,
-          path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
-                                                data_type=constants.DataType.String)),
+def patch(func: OperationFunction=None, *,
+          path: UrlPath.Atoms=ResourcePath,
           methods: Methods=constants.Method.Patch,
-          **kwargs) -> Callable[[OperationFunction], Operation]:
+          **kwargs) -> OperationDecorator:
     """
     Patch operation
 
@@ -102,11 +107,10 @@ def patch(func: OperationFunction, *,
     return inner(func) if func else inner
 
 
-def delete(func: OperationFunction, *,
-           path: UrlPath.Atoms=UrlPath(Parameter('resource_id', constants.In.Path,
-                                                 data_type=constants.DataType.String)),
+def delete(func: OperationFunction=None, *,
+           path: UrlPath.Atoms=ResourcePath,
            methods: Methods=constants.Method.Delete,
-           **kwargs) -> Callable[[OperationFunction], Operation]:
+           **kwargs) -> OperationDecorator:
     """
     Delete operation
 
@@ -116,3 +120,71 @@ def delete(func: OperationFunction, *,
         kwargs['methods'] = methods
         return Operation(f, path, **kwargs)
     return inner(func) if func else inner
+
+
+def add_param(param: Parameter) -> OperationDecorator:
+    """
+    Add parameter to an operation.
+    """
+    def inner(f: OperationFunction) -> OperationFunction:
+        try:
+            getattr(f, 'parameters').add(param)
+        except AttributeError:
+            setattr(f, 'parameters', {param})
+        return f
+    return inner
+
+
+def query_param(name: str, *,
+                description: str=None,
+                required: bool=None,
+                allow_empty: bool=None,
+                data_type: constants.DataType=constants.DataType.String) -> OperationDecorator:
+    """
+    Add a query param
+    """
+    return add_param(Parameter(name, constants.In.Query,
+                               description=description,
+                               required=required,
+                               allow_empty=allow_empty,
+                               data_type=data_type))
+
+
+def header_param(name: str, *,
+                 description: str=None,
+                 required: bool=None,
+                 allow_empty: bool=None,
+                 data_type: constants.DataType=None) -> OperationDecorator:
+    """
+    Add a query param
+    """
+    return add_param(Parameter(name, constants.In.Header,
+                               description=description,
+                               required=required,
+                               allow_empty=allow_empty,
+                               data_type=data_type))
+
+
+def cookie_param(name: str, *,
+                 description: str=None,
+                 required: bool=None,
+                 allow_empty: bool=None,
+                 data_type: constants.DataType=None) -> OperationDecorator:
+    """
+    Add a query param
+    """
+    return add_param(Parameter(name, constants.In.Cookie,
+                               description=description,
+                               required=required,
+                               allow_empty=allow_empty,
+                               data_type=data_type))
+
+
+def deprecated(func: OperationFunction=None) -> OperationDecorator:
+    """
+    Mark an operation deprecated.
+    """
+    def inner(f: OperationFunction) -> OperationFunction:
+        f.deprecated = True
+        return f
+    return inner(func) if operation else inner

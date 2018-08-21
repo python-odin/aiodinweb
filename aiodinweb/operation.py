@@ -127,11 +127,16 @@ class Operation:
 
     # Docs ##########################################################
 
-    def _responses_spec(self):
+    @staticmethod
+    def _responses_spec():
         responses = {
             'default': {'$ref': '#/components/schemas/Error'}
         }
         return responses
+
+    def _parameters_spec(self):
+        if self.parameters:
+            return [p.to_openapi() for p in self.parameters]
 
     def to_openapi(self) -> Dict[str, Any]:
         """
@@ -143,7 +148,7 @@ class Operation:
             summary=self.summary,
             description=func.__doc__.strip(),
             operationId=self.operation_id or f"{func.__module__}.{func.__name__}",
-            parameters=None,
+            parameters=self._parameters_spec(),
             requestBody=None,
             responses=self._responses_spec(),
             security=None,

@@ -26,6 +26,7 @@ from .cors import (
     AnyOrigin,
 )
 from .decorators import (
+    # Routing
     operation,
     route,
     listing,
@@ -34,6 +35,14 @@ from .decorators import (
     update,
     patch,
     delete,
+
+    # Request
+    query_param,
+    header_param,
+    cookie_param,
+
+    # Doc
+    deprecated,
 )
 from .exceptions import (
     ImmediateHttpResponse,
