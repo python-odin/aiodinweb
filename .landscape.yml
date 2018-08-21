@@ -1,0 +1,6 @@
+python-targets:
+  - 3
+max-line-length: 119
+pylint:
+  disable:
+    - too-many-arguments
