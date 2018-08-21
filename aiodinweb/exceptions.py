@@ -26,7 +26,11 @@ class HttpError(ImmediateHttpResponse):
     def __init__(self, status: HTTPStatus, code_index: int=0, message: str=None, developer_message: str=None,
                  meta: Dict[str, Any]=None, headers: Dict[str, str]=None):
         super().__init__(
-            Error.from_status(status, code_index, message, developer_message, meta),
+            Error.from_status(status,
+                              code_index=code_index,
+                              message=message,
+                              developer_message=developer_message,
+                              meta=meta),
             status, headers
         )
 
