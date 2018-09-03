@@ -21,7 +21,7 @@ Features:
 
 - Easily extensible.
 
-- Built in Authorisation and customisble Authentication.
+- Built in Authorisation and customisable Authentication.
 
 - Fully type annotated with Python 3.6+ typing support.
 
@@ -44,5 +44,3 @@ guidelines are met to ensure your PR will be accepted.
   documented.
 
 Thanks!
-
-- 
