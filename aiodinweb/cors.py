@@ -1,4 +1,5 @@
 from collections import defaultdict
+from fnmatch import fnmatch
 from typing import Union, Sequence, Type, Dict, Set, Optional
 
 from .constants import Method
@@ -43,13 +44,16 @@ class CORS:
     """
     priority = 1
 
-    def __new__(cls, api_interface: ApiInterface, *args, **kwargs) -> ApiInterface:
-        instance = object.__new__(cls)
-        instance.__init__(api_interface, *args, **kwargs)
-
-        # Add instance as middleware
+    @classmethod
+    def apply(cls, api_interface: ApiInterface, origins: Origins, *,
+              max_age: int=None, allow_credentials: bool=None,
+              expose_headers: Sequence[str]=None, allow_headers: Sequence[str]=None) -> ApiInterface:
+        instance = cls(api_interface, origins,
+                       max_age=max_age,
+                       allow_credentials=allow_credentials,
+                       expose_headers=expose_headers,
+                       allow_headers=allow_headers)
         api_interface.middleware.append(instance)
-
         return api_interface
 
     def __init__(self, api_interface: ApiInterface, origins: Origins, *,
@@ -100,16 +104,25 @@ class CORS:
         """
         return request.headers.get('ORIGIN')
 
+    def match_origin(self, origin: str) -> bool:
+        """
+        Match against an origin list (allowing for wildcards)
+        """
+        if origin:
+            for pattern in self.origins:
+                if fnmatch(origin, pattern):
+                    return True
+        return False
+
     def allow_origin(self, request: Request) -> str:
         """
         Generate allow origin header
         """
-        origins = self.origins
-        if origins is AnyOrigin:
+        if self.origins is AnyOrigin:
             return '*'
         else:
             origin = self.get_origin(request)
-            return origin if origin in origins else ''
+            return origin if self.match_origin(origin) else ''
 
     def option_headers(self, request: Request, methods: Methods) -> Dict[str, str]:
         """
